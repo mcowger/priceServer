@@ -249,7 +249,7 @@ class OpenRouterProvider(Provider):
             if 'id' not in model_data:
                 continue
             
-            model_id = model_data.get('id')
+            model_id = 'openrouter/' + model_data.get('id')
             if model_id is None:
                 continue
             
@@ -294,6 +294,130 @@ class OpenRouterProvider(Provider):
             )
             
             models.append(model)
+        
+        return models
+
+
+class ModelsDevProvider(Provider):
+    """Models.dev provider that loads data from file or URL and maps to LiteLLM format."""
+    
+    def __init__(self, file_path: Optional[str] = None, url: Optional[str] = None):
+        super().__init__(
+            id="modelsdev",
+            name="Models.dev"
+        )
+        self.file_path = file_path
+        self.url = url
+    
+    def update(self) -> None:
+        """Load data from file or URL and map to models."""
+        logger.info("Loading data...")
+        
+        raw_data = self._load_raw_data()
+        self.models = self._map_data_to_models(raw_data)
+        logger.info("Loaded %d models", len(self.models))
+    
+    def _load_raw_data(self) -> Any:
+        """Load raw data from file or URL."""
+        if self.file_path:
+            file_path = Path(self.file_path)
+            if not file_path.exists():
+                raise FileNotFoundError(f"Data file not found: {file_path}")
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        
+        elif self.url:
+            try:
+                headers = {}
+                req = urllib.request.Request(self.url, headers=headers)
+                with urllib.request.urlopen(req) as response:
+                    return json.loads(response.read().decode('utf-8'))
+            except urllib.error.URLError as e:
+                raise ConnectionError(f"Failed to fetch data from {self.url}: {e}")
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON received from {self.url}: {e}")
+        
+        else:
+            raise ValueError("Either file_path or url must be specified")
+    
+    def _map_data_to_models(self, raw_data: Any) -> List[LiteLLMModel]:
+        """Map models.dev format to Model objects."""
+        models = []
+        
+        # The models.dev format has providers at the top level, each with a "models" object
+        if not isinstance(raw_data, dict):
+            logger.warning("Expected dictionary from models.dev")
+            return models
+        
+        # Iterate through each provider
+        for provider_id, provider_data in raw_data.items():
+            if not isinstance(provider_data, dict):
+                continue
+            
+            # Get the models object from the provider
+            provider_models = provider_data.get('models', {})
+            if not isinstance(provider_models, dict):
+                continue
+            
+            # Iterate through each model in this provider
+            for model_key, model_data in provider_models.items():
+                if not isinstance(model_data, dict):
+                    continue
+                
+                # The model ID should be the provider ID combined with the model key
+                model_id = f"{provider_id}/{model_key}"
+                
+                # Extract pricing information from cost object
+                cost = model_data.get('cost', {})
+                prompt_price = float(cost.get('input', 0)) / 1_000_000  # Convert to per-token price
+                completion_price = float(cost.get('output', 0)) / 1_000_000  # Convert to per-token price
+                cache_read_price = float(cost.get('cache_read', 0)) / 1_000_000 if 'cache_read' in cost else None
+                cache_write_price = float(cost.get('cache_write', 0)) / 1_000_000 if 'cache_write' in cost else None
+                
+                # Extract modalities from modalities object
+                modalities = model_data.get('modalities', {})
+                input_modalities = modalities.get('input', ['text'])
+                output_modalities = modalities.get('output', ['text'])
+                
+                # Extract limits
+                limits = model_data.get('limit', {})
+                context_length = limits.get('context', 0)
+                max_output_tokens = limits.get('output', 0)
+                
+                # Determine mode based on output modalities
+                if 'image' in output_modalities:
+                    mode = "image_generation"
+                elif 'audio' in output_modalities:
+                    mode = "audio_speech"
+                else:
+                    mode = "chat"
+                
+                # Create LiteLLMModel object with correct mappings
+                model = LiteLLMModel(
+                    id=model_id,
+                    name=model_data.get('name', model_id),
+                    input_cost_per_token=prompt_price,
+                    max_input_tokens=context_length,
+                    max_output_tokens=max_output_tokens,
+                    output_cost_per_token=completion_price,
+                    mode=mode,
+                    supported_output_modalities=output_modalities,
+                    supports_tool_choice=model_data.get('tool_call', False),
+                    litellm_provider="modelsdev",
+                    supported_modalities=input_modalities,
+                    cache_read_input_token_cost=cache_read_price,
+                    cache_creation_input_token_cost=cache_write_price,
+                    supports_reasoning=model_data.get('reasoning', False),
+                    supports_function_calling=model_data.get('tool_call', False),
+                    # Additional fields from the models.dev format
+                    knowledge=model_data.get('knowledge', ''),
+                    release_date=model_data.get('release_date', ''),
+                    last_updated=model_data.get('last_updated', ''),
+                    open_weights=model_data.get('open_weights', False)
+                )
+                
+                models.append(model)
         
         return models
 
@@ -359,7 +483,7 @@ class ModelCapabilitiesServer(BaseHTTPRequestHandler):
             for provider in self.provider_manager.providers:
                 for model in provider.models:
                     # Create the combined key: provider_id/model_id
-                    combined_key = f"{provider.id}/{model.id}"
+                    combined_key = f"{model.id}"
                     litellm_format[combined_key] = model.to_dict()
             
             # Send response
@@ -431,7 +555,9 @@ def run_server(port: int):
     provider_manager.add_provider(OpenRouterProvider(
         url="https://openrouter.ai/api/v1/models")
     )
-    
+    provider_manager.add_provider(ModelsDevProvider(
+        url="https://models.dev/api.json")
+    )
 
     # Update all providers to load their data
     provider_manager.update_all()
