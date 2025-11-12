@@ -1,0 +1,71 @@
+{
+    "openrouter/openai/gpt-5-codex": {
+        "cache_read_input_token_cost": 1.25e-07,
+        "input_cost_per_token": 1.25e-06,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 272000,
+        "max_output_tokens": 128000,
+        "max_tokens": 128000,
+        "mode": "chat",
+        "output_cost_per_token": 1e-05,
+        "supported_modalities": [
+            "text",
+            "image"
+        ],
+        "supported_output_modalities": [
+            "text"
+        ],
+        "supports_reasoning": true,
+        "supports_tool_choice": true
+    },
+    "ovhcloud/Mistral-7B-Instruct-v0.3": {
+        "input_cost_per_token": 1e-07,
+        "litellm_provider": "ovhcloud",
+        "max_input_tokens": 127000,
+        "max_output_tokens": 127000,
+        "max_tokens": 127000,
+        "mode": "chat",
+        "output_cost_per_token": 1e-07,
+        "source": "https://endpoints.ai.cloud.ovh.net/models/mistral-7b-instruct-v0-3",
+        "supports_function_calling": true,
+        "supports_response_schema": true,
+        "supports_tool_choice": true
+    },
+    "replicate/meta/llama-2-70b-chat": {
+        "input_cost_per_token": 6.5e-07,
+        "litellm_provider": "replicate",
+        "max_input_tokens": 4096,
+        "max_output_tokens": 4096,
+        "max_tokens": 4096,
+        "mode": "chat",
+        "output_cost_per_token": 2.75e-06,
+        "supports_tool_choice": true
+    },
+    "sambanova/Llama-4-Scout-17B-16E-Instruct": {
+        "input_cost_per_token": 4e-07,
+        "litellm_provider": "sambanova",
+        "max_input_tokens": 8192,
+        "max_output_tokens": 8192,
+        "max_tokens": 8192,
+        "metadata": {
+            "notes": "For vision models, images are converted to 6432 input tokens and are billed at that amount"
+        },
+        "mode": "chat",
+        "output_cost_per_token": 7e-07,
+        "source": "https://cloud.sambanova.ai/plans/pricing",
+        "supports_function_calling": true,
+        "supports_response_schema": true,
+        "supports_tool_choice": true
+    },
+    "text-embedding-005": {
+        "input_cost_per_character": 2.5e-08,
+        "input_cost_per_token": 1e-07,
+        "litellm_provider": "vertex_ai-embedding-models",
+        "max_input_tokens": 2048,
+        "max_tokens": 2048,
+        "mode": "embedding",
+        "output_cost_per_token": 0,
+        "output_vector_size": 768,
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models"
+    }
+}
