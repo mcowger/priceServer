@@ -145,7 +145,7 @@ Each model includes the following information:
 - **name**: Human-readable model name
 - **pricing**: Cost per token for input and output
   - `input_cost_per_token`: Cost per input token
-  - `output_cost_per_token`: Cost per output token
+  - `output_cost_per_token`: Cost for output token
   - `cache_read_input_token_cost`: Cost for reading cached tokens (if available)
   - `cache_creation_input_token_cost`: Cost for creating cache (if available)
 - **limits**: Model constraints
@@ -194,6 +194,38 @@ git clone <repository>
 cd priceServer
 docker build -t model-prices-converter .
 docker run -p 8080:8080 model-prices-converter
+```
+
+## CI/CD
+
+The project uses GitHub Actions for continuous integration and deployment:
+
+- **Auto-build**: Docker image is automatically built on every commit to `main`
+- **Auto-publish**: Built images are published to GitHub Container Registry
+- **Multi-tag support**: Images are tagged with branch name, commit SHA, and `latest`
+
+### GitHub Container Registry (Recommended)
+
+A pre-built Docker image is automatically published to GitHub Container Registry:
+
+```bash
+# Pull and run the latest image
+docker run -p 8080:8080 ghcr.io/mcowger/priceserver
+
+# Use a specific version
+docker run -p 8080:8080 ghcr.io/mcowger/priceserver:latest
+```
+
+**Registry**: https://ghcr.io/mcowger/priceserver
+
+### Authentication for GitHub Container Registry
+
+```bash
+# Login to GitHub Container Registry
+echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
+
+# Pull the image
+docker pull ghcr.io/mcowger/priceserver:latest
 ```
 
 ## Development

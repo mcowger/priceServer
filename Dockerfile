@@ -1,5 +1,6 @@
 # Use a minimal Python base image
 FROM python:alpine
+LABEL org.opencontainers.image.source=https://github.com/mcowger/priceServer
 
 # Set the working directory
 WORKDIR /app
