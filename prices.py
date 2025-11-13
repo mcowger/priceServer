@@ -12,6 +12,11 @@ Examples:
     python prices.py --port 8080
     python prices.py --exclude-modelsdev-provider openrouter
     python prices.py --exclude-modelsdev-provider openrouter --exclude-modelsdev-provider anthropic
+    EXCLUDED_MODELS_DEV_PROVIDERS="openrouter,mistral" python prices.py
+
+Environment Variables:
+    EXCLUDED_MODELS_DEV_PROVIDERS - Comma-separated list of providers to exclude 
+                                    from models.dev source (e.g., "openrouter,mistral")
 
 Endpoints:
     GET http://localhost:8080/models - Get all providers and their models in LiteLLM format
@@ -22,6 +27,7 @@ import argparse
 import urllib.request
 import urllib.error
 import logging
+import os
 from typing import Dict, List, Any, Optional, Union
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from abc import ABC, abstractmethod
@@ -613,6 +619,10 @@ Examples:
   python prices.py --port 8080
   python prices.py
   
+Environment Variables:
+  EXCLUDED_MODELS_DEV_PROVIDERS - Comma-separated list of providers to exclude 
+                                  from models.dev source (e.g., "openrouter,mistral")
+  
 Endpoints:
   GET /models - Get all providers and their models in LiteLLM format
   GET / - Get all providers and their models in LiteLLM format
@@ -637,7 +647,24 @@ Endpoints:
 
     args = parser.parse_args()
     
-    run_server(args.port, args.excluded_modelsdev_providers)
+    # Read excluded providers from environment variable
+    env_excluded = os.environ.get('EXCLUDED_MODELS_DEV_PROVIDERS', '')
+    env_excluded_list = [p.strip() for p in env_excluded.split(',') if p.strip()]
+    
+    # Combine environment variable and command line exclusions
+    all_excluded_providers = env_excluded_list.copy()
+    if args.excluded_modelsdev_providers:
+        all_excluded_providers.extend(args.excluded_modelsdev_providers)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    final_excluded_providers = []
+    for provider in all_excluded_providers:
+        if provider not in seen:
+            seen.add(provider)
+            final_excluded_providers.append(provider)
+    
+    run_server(args.port, final_excluded_providers)
 
 if __name__ == "__main__":
     main()
