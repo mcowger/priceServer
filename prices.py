@@ -6,10 +6,12 @@ This script serves information about LLM model capabilities according to the Lit
 It defines Model and Provider classes and serves data via HTTP endpoints.
 
 Usage:
-    python prices.py [--port PORT]
+    python prices.py [--port PORT] [--exclude-modelsdev-provider PROVIDER_ID]
     
-Example:
+Examples:
     python prices.py --port 8080
+    python prices.py --exclude-modelsdev-provider openrouter
+    python prices.py --exclude-modelsdev-provider openrouter --exclude-modelsdev-provider anthropic
 
 Endpoints:
     GET http://localhost:8080/models - Get all providers and their models in LiteLLM format
@@ -249,8 +251,8 @@ class OpenRouterProvider(Provider):
             if 'id' not in model_data:
                 continue
             
-            model_id = 'openrouter/' + model_data.get('id')
-            if model_id is None:
+            model_id = 'openrouter/' + model_data.get('id', '')
+            if model_id == 'openrouter/' or model_id is None:
                 continue
             
             # Extract pricing information
@@ -301,13 +303,14 @@ class OpenRouterProvider(Provider):
 class ModelsDevProvider(Provider):
     """Models.dev provider that loads data from file or URL and maps to LiteLLM format."""
     
-    def __init__(self, file_path: Optional[str] = None, url: Optional[str] = None):
+    def __init__(self, file_path: Optional[str] = None, url: Optional[str] = None, excluded_providers: Optional[List[str]] = None):
         super().__init__(
             id="modelsdev",
             name="Models.dev"
         )
         self.file_path = file_path
         self.url = url
+        self.excluded_providers = excluded_providers or []
     
     def update(self) -> None:
         """Load data from file or URL and map to models."""
@@ -353,6 +356,11 @@ class ModelsDevProvider(Provider):
         # Iterate through each provider
         for provider_id, provider_data in raw_data.items():
             if not isinstance(provider_data, dict):
+                continue
+            
+            # Skip excluded providers
+            if provider_id in self.excluded_providers:
+                logger.info("Skipping excluded provider: %s", provider_id)
                 continue
             
             # Get the models object from the provider
@@ -404,7 +412,7 @@ class ModelsDevProvider(Provider):
                     mode=mode,
                     supported_output_modalities=output_modalities,
                     supports_tool_choice=model_data.get('tool_call', False),
-                    litellm_provider="modelsdev",
+                    litellm_provider="openai_like",
                     supported_modalities=input_modalities,
                     cache_read_input_token_cost=cache_read_price,
                     cache_creation_input_token_cost=cache_write_price,
@@ -548,16 +556,22 @@ class ModelCapabilitiesServer(BaseHTTPRequestHandler):
         logger.info("Server: " + format, *args)
 
 
-def run_server(port: int):
-    """Run the HTTP server."""
+def run_server(port: int, excluded_modelsdev_providers: Optional[List[str]] = None):
+    """Run the HTTP server.
+    
+    Args:
+        port: Port to run the server on
+        excluded_modelsdev_providers: List of provider IDs to exclude from models.dev source
+    """
     # Create provider manager
     provider_manager = ProviderManager()
     provider_manager.add_provider(OpenRouterProvider(
         url="https://openrouter.ai/api/v1/models")
     )
     provider_manager.add_provider(ModelsDevProvider(
-        url="https://models.dev/api.json")
-    )
+        url="https://models.dev/api.json",
+        excluded_providers=excluded_modelsdev_providers
+    ))
 
     # Update all providers to load their data
     provider_manager.update_all()
@@ -613,10 +627,17 @@ Endpoints:
         default=8080,
         help="Port to run the server on (default: 8080)"
     )
+    
+    parser.add_argument(
+        "--exclude-modelsdev-provider",
+        action="append",
+        dest="excluded_modelsdev_providers",
+        help="Provider to exclude from models.dev source (can be specified multiple times)"
+    )
 
     args = parser.parse_args()
     
-    run_server(args.port)
+    run_server(args.port, args.excluded_modelsdev_providers)
 
 if __name__ == "__main__":
     main()
