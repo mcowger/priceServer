@@ -28,6 +28,7 @@ import urllib.request
 import urllib.error
 import logging
 import os
+import threading
 from typing import Dict, List, Any, Optional, Union
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from abc import ABC, abstractmethod
@@ -468,6 +469,52 @@ class ProviderManager:
         return {provider.id: provider for provider in self.providers}
 
 
+DEFAULT_PROVIDER_REFRESH_INTERVAL_SECONDS = 6 * 60 * 60  # 6 hours
+PROVIDER_REFRESH_INTERVAL_ENV_VAR = "PROVIDER_REFRESH_INTERVAL_SECONDS"
+
+
+def _get_provider_refresh_interval_seconds() -> int:
+    """Return the refresh interval from the env var or the default."""
+
+    raw_value = os.environ.get(PROVIDER_REFRESH_INTERVAL_ENV_VAR)
+    if not raw_value:
+        return DEFAULT_PROVIDER_REFRESH_INTERVAL_SECONDS
+
+    try:
+        parsed = int(raw_value)
+        if parsed <= 0:
+            raise ValueError("must be positive")
+        logger.info("Using provider refresh interval %s seconds from %s", parsed, PROVIDER_REFRESH_INTERVAL_ENV_VAR)
+        return parsed
+    except ValueError as exc:
+        logger.warning(
+            "Invalid %s=%r, falling back to default %s seconds: %s",
+            PROVIDER_REFRESH_INTERVAL_ENV_VAR,
+            raw_value,
+            DEFAULT_PROVIDER_REFRESH_INTERVAL_SECONDS,
+            exc,
+        )
+        return DEFAULT_PROVIDER_REFRESH_INTERVAL_SECONDS
+
+
+def _start_periodic_provider_updates(provider_manager: ProviderManager, interval_seconds: int = DEFAULT_PROVIDER_REFRESH_INTERVAL_SECONDS):
+    """Run updates for all providers every ``interval_seconds`` in a daemon thread."""
+
+    stop_event = threading.Event()
+
+    def _run_loop():
+        logger.info("Starting periodic provider refresh every %s seconds", interval_seconds)
+        while not stop_event.wait(interval_seconds):
+            logger.info("Scheduled provider refresh beginning")
+            provider_manager.update_all()
+            logger.info("Scheduled provider refresh finished")
+        logger.info("Periodic provider refresh loop stopped")
+
+    thread = threading.Thread(target=_run_loop, name="ProviderRefreshLoop", daemon=True)
+    thread.start()
+    return stop_event, thread
+
+
 class ModelCapabilitiesServer(BaseHTTPRequestHandler):
     """HTTP server for serving LiteLLM model capabilities."""
     
@@ -601,11 +648,16 @@ def run_server(port: int, excluded_modelsdev_providers: Optional[List[str]] = No
     logger.info("  GET http://localhost:%d/providers - Get all providers", port)
     logger.info("  GET http://localhost:%d/provider/{provider_id} - Get models from specific provider", port)
     logger.info("Press Ctrl+C to stop the server")
-    
+    interval_seconds = _get_provider_refresh_interval_seconds()
+    stop_event, update_thread = _start_periodic_provider_updates(provider_manager, interval_seconds)
+
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         logger.info("\nShutting down server...")
+    finally:
+        stop_event.set()
+        update_thread.join()
         httpd.shutdown()
 
 

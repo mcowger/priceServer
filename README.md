@@ -164,6 +164,11 @@ Each model includes the following information:
 - **litellm_provider**: Provider identifier for LiteLLM compatibility
 
 
+## Automatic Provider Refresh
+
+When the server starts, it will refresh every registered provider immediately and then continue to refresh all providers at a configurable interval (default every six hours). Set the `PROVIDER_REFRESH_INTERVAL_SECONDS` environment variable to adjust the period to suit your deployment. Each refresh logs its start/stop so you can monitor the activity in the console. Press `Ctrl+C` to stop the server and the background refresh loop will shut down cleanly.
+
+
 ## Docker Image
 
 A pre-built Docker image is available on Docker Hub:
